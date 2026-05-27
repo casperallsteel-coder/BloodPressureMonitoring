@@ -1,4 +1,4 @@
-const CACHE_NAME = "bt-app-v1";
+const CACHE_NAME = "bt-app-v2";
 
 self.addEventListener("install", e => {
   e.waitUntil(
