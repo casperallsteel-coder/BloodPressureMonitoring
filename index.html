@@ -1,235 +1,145 @@
+
+
 <!DOCTYPE html>
 <html lang="da">
-
 <head>
-    <meta charset="UTF-8">
-    
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<title>Blodtryks App</title>
 <link rel="manifest" href="manifest.json">
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-
-    <title>Blodtryks App</title>
-
-    <link rel="manifest" href="manifest.json">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <style>
-        body {
-            font-family: Arial;
-            margin: 0;
-            background: #f5f7fa;
-        }
-
-        .container {
-            max-width: 700px;
-            margin: auto;
-            background: white;
-            padding: 15px;
-        }
-
-        h2 {
-            text-align: center;
-        }
-
-        input,
-        button {
-            padding: 12px;
-            margin: 5px 0;
-            width: 100%;
-            font-size: 16px;
-        }
-
-        button {
-            border: none;
-            background: #0078D7;
-            color: white;
-            border-radius: 5px;
-        }
-
-        button.secondary {
-            background: #555;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            font-size: 14px;
-        }
-
-        th,
-        td {
-            border: 1px solid #ddd;
-            padding: 6px;
-            text-align: center;
-        }
-
-        th {
-            background: #0078D7;
-            color: white;
-        }
-
-        .report-header {
-            text-align: center;
-            margin-bottom: 15px;
-        }
-
-        @media print {
-
-            button,
-            input {
-                display: none;
-            }
-        }
-    </style>
+https://cdn.jsdelivr.net/npm/chart.js
+<<style>
+body { font-family: Arial; margin:0; background:#f5f7fa; }
+.container { max-width:700px; margin:auto; background:white; padding:15px; }
+h2 { text-align:center; }
+input,button { padding:12px; margin:5px 0; width:100%; font-size:16px; }
+button { border:none; background:#0078D7; color:white; border-radius:5px; }
+button.secondary { background:#555; }
+table { width:100%; border-collapse:collapse; margin-top:10px; font-size:14px; }
+th,td { border:1px solid #ddd; padding:6px; text-align:center; }
+th { background:#0078D7; color:white; }
+.report-header { text-align:center; margin-bottom:15px; }
+@media print {
+  button, input { display:none; }
+}
+</style>
 </head>
-
 <body>
-    <div class="container">
-        <div class="report-header">
-            <h2>Blodtryksrapport</h2>
-            <div id="summary"></div>
-        </div>
+<div class="container">
+<div class="report-header">
+  <h2>Blodtryksrapport</h2>
+  <div id="summary"></div>
+</div>
 
-        <button id="installBtn" style="display:none;">📲 Installer app</button>
+<button id="installBtn" style="display:none; margin-bottom:10px;">📲 Installer app</button>
+<input type="number" id="sys" placeholder="Systolisk">
+<input type="number" id="dia" placeholder="Diastolisk">
+<input type="number" id="pulse" placeholder="Puls">
 
-        <input type="number" id="sys" placeholder="Systolisk">
-        <input type="number" id="dia" placeholder="Diastolisk">
-        <input type="number" id="pulse" placeholder="Puls">
 
-        <button onclick="gemMaaling()">Gem måling</button>
+<button onclick="gemMaaling()">Gem måling</button>
 
-        <hr>
+<hr>
 
-        <button onclick="downloadData()">Download data</button>
-        <input type="file" onchange="uploadData(event)">
+<button class="secondary" onclick="window.print()">📄 Generér læge-PDF</button>
 
-        <hr>
+<canvas id="chart"></canvas>
+<table id="logTable">
+<thead>
+<tr><th>Dato</th><th>Sys</th><th>Dia</th><th>Puls</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
 
-        <button class="secondary" onclick="window.print()">📄 Generér læge-PDF</button>
+<script>
+let log = JSON.parse(localStorage.getItem('bt_log')) || [];
+let chart;
+let deferredPrompt;
 
-        <canvas id="chart"></canvas>
+// INSTALL BUTTON
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBtn').style.display = 'block';
+});
 
-        <table id="logTable">
-            <thead>
-                <tr>
-                    <th>Dato</th>
-                    <th>Sys</th>
-                    <th>Dia</th>
-                    <th>Puls</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-    </div>
+document.getElementById('installBtn').onclick = async () => {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+  }
+};
+// REGISTER SERVICE WORKER
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+function saveData(){
+  localStorage.setItem('bt_log', JSON.stringify(log));
+}
 
-    <script>
-        let log = [];
-        let chart;
-        let deferredPrompt;
 
-        // install button
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            document.getElementById('installBtn').style.display = 'block';
-        });
+function gemMaaling(){
+  const sys = val('sys');
+  const dia = val('dia');
+  const pulse = val('pulse');
 
-        document.getElementById('installBtn').onclick = async () => {
-            deferredPrompt.prompt();
-            await deferredPrompt.userChoice;
-        };
+  if(!sys||!dia||!pulse){ alert('Udfyld alle felter'); return; }
 
-        // service worker
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
-        }
+  log.push({ date:new Date().toISOString(), sys:+sys, dia:+dia, pulse:+pulse });
+  saveData();
+  clear(); visLog();
+}
 
-        // app logic
-        function gemMaaling() {
-            const sys = val('sys');
-            const dia = val('dia');
-            const pulse = val('pulse');
+function visLog(){
+  const tbody=document.querySelector('#logTable tbody');
+  tbody.innerHTML='';
 
-            if (!sys || !dia || !pulse) { alert('Udfyld alle felter'); return; }
+  log.forEach(e=>{
+    tbody.innerHTML += `<tr>
+      <td>${new Date(e.date).toLocaleString()}</td>
+      <td>${e.sys}</td>
+      <td>${e.dia}</td>
+      <td>${e.pulse}</td>
+    </tr>`;
+  });
 
-            log.push({ date: new Date().toISOString(), sys: +sys, dia: +dia, pulse: +pulse });
-            clear(); visLog();
-        }
+  updateSummary();
+  drawChart();
+}
 
-        function visLog() {
-            const tbody = document.querySelector('#logTable tbody');
-            tbody.innerHTML = '';
+function updateSummary(){
+  if(log.length===0){ summary.innerHTML=''; return; }
+  const avgSys = (log.reduce((a,b)=>a+b.sys,0)/log.length).toFixed(1);
+  const avgDia = (log.reduce((a,b)=>a+b.dia,0)/log.length).toFixed(1);
+  const avgPulse = (log.reduce((a,b)=>a+b.pulse,0)/log.length).toFixed(1);
 
-            log.forEach(e => {
-                tbody.innerHTML += `<tr>
-      <td>${new Date(e.date).toLocaleString()}</td>
-      <td>${e.sys}</td>
-      <td>${e.dia}</td>
-      <td>${e.pulse}</td>
-    </tr>`;
-            });
+  summary.innerHTML = `Gennemsnit: ${avgSys}/${avgDia} mmHg | Puls: ${avgPulse}`;
+}
 
-            updateSummary();
-            drawChart();
-        }
+function drawChart(){
+  const labels = log.map(e=> new Date(e.date).toLocaleDateString());
+  const sys = log.map(e=> e.sys);
+  const dia = log.map(e=> e.dia);
 
-        function updateSummary() {
-            if (log.length === 0) { summary.innerHTML = ''; return; }
+  if(chart) chart.destroy();
 
-            const avgSys = (log.reduce((a, b) => a + b.sys, 0) / log.length).toFixed(1);
-            const avgDia = (log.reduce((a, b) => a + b.dia, 0) / log.length).toFixed(1);
-            const avgPulse = (log.reduce((a, b) => a + b.pulse, 0) / log.length).toFixed(1);
+  chart=new Chart(document.getElementById('chart'),{
+    type:'line',
+    data:{ labels,
+      datasets:[
+        {label:'Systolisk',data:sys},
+        {label:'Diastolisk',data:dia}
+      ]
+    }
+  });
+}
 
-            summary.innerHTML = `Gennemsnit: ${avgSys}/${avgDia} | Puls: ${avgPulse}`;
-        }
+function val(id){ return document.getElementById(id).value; }
+function clear(){ sys.value=''; dia.value=''; pulse.value=''; }
 
-        function drawChart() {
-            const labels = log.map(e => new Date(e.date).toLocaleDateString());
-            const sys = log.map(e => e.sys);
-            const dia = log.map(e => e.dia);
+const summary = document.getElementById('summary');
 
-            if (chart) chart.destroy();
-
-            chart = new Chart(chartCanvas, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [
-                        { label: 'Systolisk', data: sys },
-                        { label: 'Diastolisk', data: dia }
-                    ]
-                }
-            });
-        }
-
-        function downloadData() {
-            const blob = new Blob([JSON.stringify(log, null, 2)]);
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'blodtryk.json';
-            a.click();
-        }
-
-        function uploadData(e) {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = f => { log = JSON.parse(f.target.result); visLog(); };
-            reader.readAsText(file);
-        }
-
-        function val(id) { return document.getElementById(id).value; }
-        function clear() { sys.value = ''; dia.value = ''; pulse.value = ''; }
-
-        const chartCanvas = document.getElementById('chart');
-        const summary = document.getElementById('summary');
-
-        visLog();
-    </script>
+visLog();
+</script>
 </body>
-
-</html>
